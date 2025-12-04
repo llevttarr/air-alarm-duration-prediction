@@ -1,0 +1,67 @@
+---
+title: "Prediction model"
+output:
+  html_document: default
+  html_notebook:
+    fig_caption: yes
+    number_sections: yes
+    toc: yes
+editor_options:
+  chunk_output_type: inline
+  markdown: 
+    wrap: 72
+---
+```{r}
+library(lubridate)
+library(mgcv)
+```
+
+```{r}
+df <- read.csv("../datasets/tg_parsed_alarms.csv")
+df$started <- ymd_hms(df$started, tz = "UTC")
+
+df$start_hour <- hour(df$started)
+df$start_hour <- as.numeric(df$start_hour)
+
+df$start_year <- year(df$started)
+df$start_year <- as.numeric(df$start_year)
+
+df$alarm_type <- as.factor(df$alarm_type)
+df$duration_min <- as.numeric(df$duration_min)
+head(df)
+```
+
+```{r}
+hour_lm<-lm(formula=duration_min ~ start_hour,data=df)
+summary(hour_lm)
+plot(df$start_hour, df$duration_min,
+     xlab = "start hour",
+     ylab = "duration",
+     main = "duration|start hour")
+
+abline(hour_lm, col = "red", lwd = 2)
+```
+```{r}
+hour_year_lm<-lm(formula=duration_min ~ start_year*start_hour,data=df)
+summary(hour_year_lm)
+```
+
+
+
+
+```{r}
+type_lm<-lm(formula=duration_min ~ alarm_type,data=df)
+summary(type_lm)
+```
+
+
+```{r}
+f_lm<-lm(formula=duration_min ~ alarm_type*start_hour*start_year,data=df)
+summary(f_lm)
+```
+
+
+```{r}
+model_gam <- gam(duration_min ~ alarm_type + s(start_hour), data = df)
+summary(model_gam)
+```
