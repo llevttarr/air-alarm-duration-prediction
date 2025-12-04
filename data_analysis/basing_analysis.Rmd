@@ -8,6 +8,10 @@ library(MASS)
 
 library(dplyr)
 library(lubridate)
+install.packages("kSamples")
+
+library(kSamples)
+
 ```
 
 ```{r}
@@ -199,3 +203,39 @@ barplot(alarm_avg$duration_min,
 
 abline(v = pretty(alarm_avg$duration_min), col = "gray80", lty = 3)
 ```
+
+```{r}
+raketna_durations <- df[df$alarm_type == "МіГ-31К", ]$duration_min
+all_mean <- mean(df$duration_min)
+t.test(x = raketna_durations, y = df$duration_min)
+```
+
+```{r}
+cat(mean(df$duration_min), "\n\n")
+y = df$duration_min
+ad_pvalue <- function(res, version = 1, type = "asymptotic") {
+  col <- ifelse(type == "asymptotic", 3, 4)
+  res$ad[version, col]
+} 
+
+for (type in unique(df$alarm_type)){
+  x <- df[df$alarm_type == type, ]$duration_min
+  
+  t_test <- t.test(x = x, y = y, alternative = "two.sided")
+  pval_t <- format(t_test$p.value, scientific = FALSE)
+  
+  ks_test <- suppressWarnings(ks.test(x = x, y = y, alternative = "two.sided"))
+  pval_ks <- format(ks_test$p.value, scientific = FALSE)
+  
+  ad_test <- ad.test(x, y)
+  pval_ad <- format(ad_pvalue(ad_test), scientific = FALSE)
+  
+  cat(type, "   p = ", pval_t, "     t test", "\n")
+  cat(type, "   p = ", pval_ks, "     ks test", "\n")
+  cat(type, "   p = ", pval_ad, "     ad test", "\n\n")
+}
+#print(ad_test <- ad.test(x, y))
+```
+
+
+
