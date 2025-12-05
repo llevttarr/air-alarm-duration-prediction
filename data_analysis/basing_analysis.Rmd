@@ -3,13 +3,13 @@ title: "testing_dependencies"
 output: html_document
 date: "2025-12-02"
 ---
+
 ```{r}
 library(MASS)
 
 library(dplyr)
 library(lubridate)
-install.packages("kSamples")
-
+library(fitdistrplus)
 library(kSamples)
 
 ```
@@ -18,6 +18,7 @@ library(kSamples)
 df <- read.csv("../datasets/tg_parsed_alarms.csv")
 head(df)
 ```
+
 ```{r}
 hist(df$duration_min,
     breaks = 30,
@@ -26,7 +27,7 @@ hist(df$duration_min,
     main = "Histogram of duration_min")
 ```
 
-``` {r}
+```{r}
 data <- df$duration_min
 data <- data[!is.na(data)]
 data <- data[data > 0] 
@@ -64,6 +65,7 @@ legend("topright",
        col = c("red", "blue"),
        lwd = 2)
 ```
+
 ```{r}
 df$started <- sub("\\+00:00$", "", df$started)
 df$started <- as.POSIXct(df$started, format = "%Y-%m-%d %H:%M:%S", tz = "UTC")
@@ -77,6 +79,7 @@ plot(df$started, df$duration_min,
 
 grid(col = "gray", lty = 3, lwd = 0.5)
 ```
+
 ```{r}
 df$duration_min <- as.numeric(df$duration_min)
 
@@ -101,8 +104,7 @@ plot(weekly_mean$week, weekly_mean$duration_min,
 grid(col = "gray", lty = 3, lwd = 0.5)
 ```
 
-
-``` {r}
+```{r}
 monthly_mean <- df %>%
   mutate(month = floor_date(started, "month")) %>%
   group_by(month) %>%
@@ -123,7 +125,6 @@ plot(monthly_mean$month, monthly_mean$duration_min,
 grid(col = "gray", lty = 3, lwd = 0.5)
 
 ```
-
 
 ```{r}
 
@@ -238,4 +239,31 @@ for (type in unique(df$alarm_type)){
 ```
 
 
+```{r}
+data <- data[!is.na(data) & data > 0]
+descdist(data, boot = 500) 
+```
 
+```{r}
+fit_exp  <- fitdist(data, "exp")
+fit_gamma <- fitdist(data, "gamma")
+fit_lnorm <- fitdist(data, "lnorm")
+fit_weib  <- fitdist(data, "weibull")
+
+
+fit_exp
+fit_gamma
+```
+
+```{r}
+gofstat(list(fit_exp, fit_gamma, fit_lnorm, fit_weib))
+```
+
+
+```{r}
+par(mfrow = c(2,2))
+plot(fit_exp)
+plot(fit_gamma)
+plot(fit_lnorm)
+plot(fit_weib)
+```
