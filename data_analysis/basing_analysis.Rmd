@@ -204,45 +204,52 @@ barplot(alarm_avg$duration_min,
 
 abline(v = pretty(alarm_avg$duration_min), col = "gray80", lty = 3)
 ```
-
+---
+# Testing hypothesis
+### Test: $H_0: \mu = \mu_{\text{type}}, \quad H_1: \mu \neq \mu_{\text{type}}$
 ```{r}
-raketna_durations <- df[df$alarm_type == "МіГ-31К", ]$duration_min
-all_mean <- mean(df$duration_min)
-t.test(x = raketna_durations, y = df$duration_min)
-```
+y_all <- df$duration_min
 
-```{r}
-cat(mean(df$duration_min), "\n\n")
-y = df$duration_min
 ad_pvalue <- function(res, version = 1, type = "asymptotic") {
   col <- ifelse(type == "asymptotic", 3, 4)
   res$ad[version, col]
-} 
+}
 
-for (type in unique(df$alarm_type)){
-  x <- df[df$alarm_type == type, ]$duration_min
+for (type in unique(df$alarm_type)) {
   
-  t_test <- t.test(x = x, y = y, alternative = "two.sided")
+  x <- df$duration_min[df$alarm_type == type]
+
+  y <- df$duration_min[df$alarm_type != type]
+
+  t_test <- t.test(x, y, alternative = "two.sided")
   pval_t <- format(t_test$p.value, scientific = FALSE)
-  
-  ks_test <- suppressWarnings(ks.test(x = x, y = y, alternative = "two.sided"))
+
+  ks_test <- suppressWarnings(ks.test(x, y, alternative = "two.sided"))
   pval_ks <- format(ks_test$p.value, scientific = FALSE)
   
   ad_test <- ad.test(x, y)
   pval_ad <- format(ad_pvalue(ad_test), scientific = FALSE)
   
-  cat(type, "   p = ", pval_t, "     t test", "\n")
-  cat(type, "   p = ", pval_ks, "     ks test", "\n")
-  cat(type, "   p = ", pval_ad, "     ad test", "\n\n")
+  cat("Alarm type:", type, "\n")
+  cat("  t-test p =", pval_t, "\n")
+  cat("  KS test p =", pval_ks, "\n")
+  cat("  AD test p =", pval_ad, "\n\n")
 }
-#print(ad_test <- ad.test(x, y))
 ```
+--- 
+### H0 - start time of an alarm and it’s duration are independent H1 - there is a dependence between the time of the start of an alarm and it’s duration
+```{r}
+df$hour <- as.numeric(format(df$started, "%H")) +
+           as.numeric(format(df$started, "%M")) / 60
+cor_test <- cor.test(df$hour, df$duration_min, method = "spearman")
+cor_test
 
+```
 
 ```{r}
 data <- data[!is.na(data) & data > 0]
-descdist(data, boot = 500) 
 ```
+
 
 ```{r}
 fit_exp  <- fitdist(data, "exp")
@@ -253,17 +260,16 @@ fit_weib  <- fitdist(data, "weibull")
 
 fit_exp
 fit_gamma
+fit_lnorm
+fit_weib
 ```
 
 ```{r}
 gofstat(list(fit_exp, fit_gamma, fit_lnorm, fit_weib))
 ```
 
+To model the distribution of `duration_min`, we considered several candidate distributions: exponential, gamma, Weibull, and lognormal. According to all goodness-of-fit criteria (Kolmogorov–Smirnov, Cramer–von Mises, and Anderson–Darling statistics) as well as information criteria (AIC and BIC), the lognormal distribution provides the best fit to the empirical data. Therefore, in the subsequent analysis we assume:
 
-```{r}
-par(mfrow = c(2,2))
-plot(fit_exp)
-plot(fit_gamma)
-plot(fit_lnorm)
-plot(fit_weib)
-```
+duration_min \~ Lognormal(μ, σ²),
+
+where the parameters μ and σ are estimated using the maximum likelihood method.
