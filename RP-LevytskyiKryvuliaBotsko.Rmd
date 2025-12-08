@@ -444,7 +444,7 @@ $b_3$: start year - 2022,
 
 $b_4$: weekday,
 
-$c_j$: for each of the 5 air alarm types (if the air alarm is active
+$c_j$: for each of the 5 air alarm types (if the air alarm type is active
 then $i_j$ = 1)
 
 ```{r}
