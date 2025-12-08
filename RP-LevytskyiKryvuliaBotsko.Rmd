@@ -1,0 +1,330 @@
+---
+title: "Research Project"
+output:
+  html_document: default
+  html_notebook:
+    fig_caption: yes
+    number_sections: yes
+    toc: yes
+editor_options:
+  chunk_output_type: inline
+  markdown: 
+    wrap: 72
+---
+
+# Research project: Final report
+
+> Team 19 (Arsen Botsko, Anna Kryvulia, Levytskyi Taras)
+
+# Library imports
+
+```{r}
+library(MASS)
+library(dplyr)
+library(lubridate)
+library(fitdistrplus)
+library(kSamples)
+library(mgcv)
+```
+
+# Data analysis
+
+```{r}
+df <- read.csv("datasets/tg_parsed_alarms.csv")
+head(df)
+```
+
+```{r}
+hist(df$duration_min,
+    breaks = 30,
+    xlab = "duration_min",
+    col = "lightblue",
+    main = "Histogram of duration_min")
+```
+
+```{r}
+data <- df$duration_min
+data <- data[!is.na(data)]
+data <- data[data > 0] 
+
+hist(data,
+     breaks = 30,
+     freq = FALSE,
+     col = rgb(0.2, 0.4, 1, 0.4),
+     main = "Air alarm durations with fitted distributions",
+     xlab = "duration_min",
+     ylab = "Density")
+
+lines(density(data), col = "black", lwd = 2)
+
+exp_fit <- fitdistr(data, "exponential")
+exp_fit
+
+gamma_fit <- fitdistr(data, "gamma")
+gamma_fit
+
+exp_rate <- exp_fit$estimate["rate"]
+gamma_shape <- gamma_fit$estimate["shape"]
+gamma_rate  <- gamma_fit$estimate["rate"]
+
+x <- seq(0, max(data) * 1.1, length.out = 500)
+
+exp_pdf   <- dexp(x, rate = exp_rate)
+gamma_pdf <- dgamma(x, shape = gamma_shape, rate = gamma_rate)
+
+lines(x, exp_pdf, col = "red",   lwd = 2)
+lines(x, gamma_pdf, col = "blue", lwd = 2)
+
+legend("topright",
+       legend = c("Exponential", "Gamma"),
+       col = c("red", "blue"),
+       lwd = 2)
+```
+
+```{r}
+df$started <- sub("\\+00:00$", "", df$started)
+df$started <- as.POSIXct(df$started, format = "%Y-%m-%d %H:%M:%S", tz = "UTC")
+
+plot(df$started, df$duration_min,
+     main = "Alarm Duration Over Time",
+     xlab = "Start Date",
+     ylab = "Duration (minutes)",
+     col = "blue",
+     pch = 19)
+
+grid(col = "gray", lty = 3, lwd = 0.5)
+```
+
+```{r}
+df$duration_min <- as.numeric(df$duration_min)
+
+
+weekly_mean <- df %>%
+  mutate(week = floor_date(started, "week")) %>%
+  group_by(week) %>%
+  summarise(duration_min = mean(duration_min, na.rm = TRUE)) %>%
+  arrange(week)
+
+weekly_mean
+
+plot(weekly_mean$week, weekly_mean$duration_min,
+     type = "o",
+     pch = 19,
+     main = "Average Air Alarm Duration per Week",
+     xlab = "Week",
+     ylab = "Average duration (minutes)",
+     col = "blue"
+)
+
+grid(col = "gray", lty = 3, lwd = 0.5)
+```
+
+```{r}
+monthly_mean <- df %>%
+  mutate(month = floor_date(started, "month")) %>%
+  group_by(month) %>%
+  summarise(duration_min = mean(duration_min, na.rm = TRUE)) %>%
+  arrange(month)
+
+monthly_mean
+
+plot(monthly_mean$month, monthly_mean$duration_min,
+     type = "o",
+     pch = 19,
+     main = "Average Air Alarm Duration per Month",
+     xlab = "Month",
+     ylab = "Average Duration (minutes)",
+     col = "blue"
+)
+
+grid(col = "gray", lty = 3, lwd = 0.5)
+
+```
+
+```{r}
+
+df$weekday <- (as.integer(strftime(df$started, "%u")) - 1)
+
+weekday_mean <- aggregate(df$duration_min,
+                          by = list(weekday = df$weekday),
+                          FUN = mean, na.rm = TRUE)
+colnames(weekday_mean)[2] <- "duration_min"
+
+weekday_mean <- weekday_mean[order(weekday_mean$weekday), ]
+
+
+weekday_labels <- c("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+weekday_mean$weekday_name <- weekday_labels[weekday_mean$weekday + 1]
+
+barplot(
+    weekday_mean$duration_min,
+    names.arg = weekday_mean$weekday_name,
+    col = "skyblue",
+    border = "black",
+    main = "Average Air Alarm Duration by Day of Week",
+    xlab = "Day of Week",
+    ylab = "Average Duration (minutes)"
+)
+
+abline(h = pretty(weekday_mean$duration_min), col = "gray80", lty = 3)
+```
+
+```{r}
+df$hour <- as.integer(format(df$started, "%H"))
+
+hourly <- aggregate(df$duration_min,
+                    by = list(hour = df$hour),
+                    FUN = mean, na.rm = TRUE)
+
+colnames(hourly)[2] <- "duration_min"
+
+hourly <- hourly[order(hourly$hour), ]
+
+plot(hourly$hour, hourly$duration_min,
+     type = "o",            # line + circle markers
+     pch = 19,              # filled circles
+     cex = 0.8,
+     main = "Average Alarm Duration by Start Hour",
+     xlab = "Start Hour of Day",
+     ylab = "Average Duration (minutes)",
+     xaxt = "n"             # turn off default x-axis ticks
+)
+
+axis(1, at = 0:23)
+
+grid(col = "gray", lty = 3, lwd = 0.5)
+```
+
+```{r}
+alarm_avg <- aggregate(df$duration_min,
+                       by = list(alarm_type = df$alarm_type),
+                       FUN = mean, na.rm = TRUE)
+
+colnames(alarm_avg)[2] <- "duration_min"
+
+alarm_avg <- alarm_avg[order(alarm_avg$duration_min), ]
+
+par(mar = c(5, 10, 4, 2))
+
+barplot(alarm_avg$duration_min,
+        names.arg = alarm_avg$alarm_type,
+        horiz = TRUE,
+        las = 1,
+        col = "skyblue",
+        border = "black",
+        main = "Average Alarm Duration by Alarm Type",
+        xlab = "Average Duration (minutes)"
+)
+
+
+abline(v = pretty(alarm_avg$duration_min), col = "gray80", lty = 3)
+```
+
+------------------------------------------------------------------------
+
+# Hypothesis testing
+
+## Mean testing
+
+For each air alarm type:
+
+> $H_0: \mu = \mu_{\text{type}}$,
+> $\quad H_1: \mu \neq \mu_{\text{type}}$
+
+where $\mu$ is the mean of the whole population, and $\mu_{\text{type}}$
+is the sample mean of the type
+
+```{r}
+y_all <- df$duration_min
+
+ad_pvalue <- function(res, version = 1, type = "asymptotic") {
+  col <- ifelse(type == "asymptotic", 3, 4)
+  res$ad[version, col]
+}
+
+for (type in unique(df$alarm_type)) {
+  
+  x <- df$duration_min[df$alarm_type == type]
+
+  y <- df$duration_min[df$alarm_type != type]
+
+  t_test <- t.test(x, y, alternative = "two.sided")
+  pval_t <- format(t_test$p.value, scientific = FALSE)
+
+  ks_test <- suppressWarnings(ks.test(x, y, alternative = "two.sided"))
+  pval_ks <- format(ks_test$p.value, scientific = FALSE)
+  
+  ad_test <- ad.test(x, y)
+  pval_ad <- format(ad_pvalue(ad_test), scientific = FALSE)
+  
+  cat("Alarm type:", type, "\n")
+  cat("  t-test p =", pval_t, "\n")
+  cat("  KS test p =", pval_ks, "\n")
+  cat("  AD test p =", pval_ad, "\n\n")
+}
+```
+
+## Dependence testing
+
+> $H_0$ - start time of an alarm and it’s duration are independent\
+> $H_1$ - there is a dependence between the time of the start of an
+> alarm and it’s duration
+
+```{r}
+df$hour <- as.numeric(format(df$started, "%H")) +
+           as.numeric(format(df$started, "%M")) / 60
+cor_test <- cor.test(df$hour, df$duration_min, method = "spearman")
+cor_test
+
+```
+
+```{r}
+data <- data[!is.na(data) & data > 0]
+```
+
+# Estimation models
+
+## Regression
+
+```{r}
+df <- read.csv("datasets/tg_parsed_alarms.csv")
+df$started <- ymd_hms(df$started, tz = "UTC")
+
+df$start_hour <- hour(df$started)
+df$start_hour <- as.numeric(df$start_hour)
+
+df$start_year <- year(df$started)
+df$start_year <- as.numeric(df$start_year)
+df$start_year <- df$start_year-2022
+
+df$alarm_type <- as.factor(df$alarm_type)
+df$duration_min <- as.numeric(df$duration_min)
+
+df$regions_n <- sapply(strsplit(df$alarms_in_regions, ";"), function(x) length(trimws(x)))
+head(df)
+```
+
+```{r}
+hour_lm<-lm(formula=duration_min ~ start_hour,data=df)
+summary(hour_lm)
+plot(df$start_hour, df$duration_min,
+     xlab = "start hour",
+     ylab = "duration",
+     main = "duration|start hour")
+
+abline(hour_lm, col = "red", lwd = 2)
+```
+```{r}
+f_lm<-lm(formula=duration_min ~ regions_n*alarm_type+start_hour+start_year,data=df) 
+summary(f_lm)
+```
+after removing outliers
+```{r}
+model_pr <- lm(duration_min ~ regions_n+alarm_type+start_hour+start_year, data=df)
+res <- rstandard(model_pr)
+df_clean <- df[abs(res) < 3, ]
+f_lm <- lm(duration_min ~ regions_n*alarm_type*start_hour*start_year, data=df_clean)
+summary(f_lm)
+
+```
+
