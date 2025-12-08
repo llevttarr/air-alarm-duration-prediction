@@ -21,7 +21,7 @@ knitr::opts_chunk$set(message = FALSE, warning = FALSE)
 # Goal of the project
 
 The goal of our project is to analyse the variables and events that
-influence the duration of air alarms. 
+influence the duration of air alarms.
 
 ## Library imports
 
@@ -499,7 +499,7 @@ variation in alarm durations.
 ## Lognormal Distribution:
 
 A random variable X is lognormally distributed if its logarithm is
-normally distributed: $\ln X \sim \mathcal{N}(\mu, \sigma\^{2})$
+normally distributed: $\ln X \sim \mathcal{N}(\mu, \sigma^{2})$
 
 In our case it fits well, because our data: - Cannot be negative - Most
 are small, few are extremely large - Heavy right tail
@@ -534,13 +534,16 @@ Bayesian Information Criterion:
     $\sup\_{x} \left\| F_n(x) - F(x \mid \theta) \right\|$
 
 2)  Cramer-von Mises statistic measures integrated squared distance
-    between empirical CDF and fitted distribution’s CDF $\omega\^2$ =
-    $\int\_{-\infty}\^{\infty} \left( F_n(x) - F(x) \right)\^2 , dF(x)$
+    between empirical CDF and fitted distribution’s CDF $\omega^2$ =
+    $\int_{-\infty}^{\infty} \left( F_n(x) - F(x) \right)^2 \, dF(x)$
 
 3)  Anderson-Darling statistic the same as Cramer-von Mises statistic,
     but the integrated squared distance is divided by F(x)(1 - F(x)),
-    which gives more weight to tails
-    $A\^2 = \int\_{-\infty}\^{\infty} \frac{ \left( F_n(x) - F(x) \right)^2 }{ F(x)\left( 1 - F(x) \right) }, dF(x)$
+    which gives more weight to tails $$A^2 = 
+    \int_{-\infty}^{\infty}
+    \frac{ \left( F_n(x) - F(x) \right)^2 }
+     { F(x)\bigl(1 - F(x)\bigr) }
+    \, dF(x)$$
 
 4)  Akaike Information Criterion(AIC): AIC = −2logL+2k, where L - log
     likelihood, k - number of parameters(as an example for exponential 1
