@@ -25,10 +25,15 @@ df$start_hour <- as.numeric(df$start_hour)
 
 df$start_year <- year(df$started)
 df$start_year <- as.numeric(df$start_year)
+df$start_year <- df$start_year-2022
 
 df$alarm_type <- as.factor(df$alarm_type)
 df$duration_min <- as.numeric(df$duration_min)
 head(df)
+```
+```{r}
+all_df<-read.csv("../datasets/official_data_en.csv")
+head(all_df)
 ```
 
 ```{r}
