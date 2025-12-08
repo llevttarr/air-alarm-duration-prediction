@@ -1,5 +1,5 @@
 ---
-title: "Research Project"
+title: "Research project: Final report"
 output:
   html_document: default
   html_notebook:
@@ -12,11 +12,18 @@ editor_options:
     wrap: 72
 ---
 
-# Research project: Final report
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(message = FALSE, warning = FALSE)
+```
 
 > Team 19 (Arsen Botsko, Anna Kryvulia, Levytskyi Taras)
 
-# Library imports
+# Goal of the project
+
+The goal of our project is to analyse the variables and events that
+influence the duration of air alarms. 
+
+## Library imports
 
 ```{r}
 library(MASS)
@@ -27,11 +34,26 @@ library(kSamples)
 library(mgcv)
 ```
 
-# Data analysis
+# Data description and analysis
+
+Dataset contains data about air alarm from March 2022 to the present
+day. For each air alarm we have exact time of its start and finish,
+duration in minutes and type of the alarm. To obtain this dataset, two
+datasets were used - one from
+<https://github.com/Vadimkin/ukrainian-air-raid-sirens-dataset>, that
+includes every single air alarm from March 2022 to the present day, and
+lists their location(oblast, raion, hromada), location level (e.g.
+oblast-wide,hromada-wide), start/finish time and source. And to obtain
+type of the alarm we parsed telegram channels, that inform about it. In
+our project we will focus on analysing durations of air alarms and how
+they may depend on other parameters(time of the beginning or type of the
+alarm)
 
 ```{r}
 df <- read.csv("datasets/tg_parsed_alarms.csv")
-head(df)
+data <- df$duration_min
+data <- data[!is.na(data)]
+data <- data[data > 0] 
 ```
 
 ```{r}
@@ -42,94 +64,92 @@ hist(df$duration_min,
     main = "Histogram of duration_min")
 ```
 
+Histogram of durations of air alarms clearly tell us, that its
+distribution is not normal (it is not symetrical and right-skewed). We
+suggest such list of distributions to be tested: exponential, gamma and
+lognormal\*.
+
+(Look at the end of report for detailed info about lognormal
+distribution)
+
+Let’s test these hypotheses using a parametric goodness-of-fit
+approach\*.
+
+Using a full goodness-of-fit approach is better than using only the
+Kolmogorov–Smirnov test, because KS evaluates only the maximum
+difference between the empirical and theoretical CDF, while ignoring the
+overall shape, tail behavior, and model complexity. In contrast, the
+goodness-of-fit framework combines several complementary statistics (KS,
+Cramer–von Mises, Anderson–Darling) together with information criteria
+such as AIC/BIC, which allow fair comparison between distributions with
+different numbers of parameters. This gives a clearer and more balanced
+understanding of which distribution fits the data best.
+
+(More detailed info is also provided at the end of report)
+
 ```{r}
-data <- df$duration_min
-data <- data[!is.na(data)]
-data <- data[data > 0] 
+fit_exp  <- fitdist(data, "exp")
+fit_gamma <- fitdist(data, "gamma")
+fit_lnorm <- fitdist(data, "lnorm")
+
+
+gofstat(list(fit_exp, fit_gamma, fit_lnorm))
+
+```
+
+The lognormal distribution provides the best fit to the empirical data.
+
+duration_min \~ Lognormal($\mu$, $\sigma ^2$),
+
+where the parameters $\mu$ and $\sigma$ are estimated using the maximum
+likelihood method.
+
+```{r}
+mu <- fit_lnorm$estimate["meanlog"]
+cat('mu = ', mu, "\n")
+
+sigma <- fit_lnorm$estimate["sdlog"]
+cat("sigma = ", sigma)
+```
+
+```{r}
 
 hist(data,
      breaks = 30,
      freq = FALSE,
      col = rgb(0.2, 0.4, 1, 0.4),
-     main = "Air alarm durations with fitted distributions",
+     border = "white",
+     main = "Air alarm durations with Lognormal Fit",
      xlab = "duration_min",
      ylab = "Density")
 
-lines(density(data), col = "black", lwd = 2)
-
-exp_fit <- fitdistr(data, "exponential")
-exp_fit
-
-gamma_fit <- fitdistr(data, "gamma")
-gamma_fit
-
-exp_rate <- exp_fit$estimate["rate"]
-gamma_shape <- gamma_fit$estimate["shape"]
-gamma_rate  <- gamma_fit$estimate["rate"]
-
-x <- seq(0, max(data) * 1.1, length.out = 500)
-
-exp_pdf   <- dexp(x, rate = exp_rate)
-gamma_pdf <- dgamma(x, shape = gamma_shape, rate = gamma_rate)
-
-lines(x, exp_pdf, col = "red",   lwd = 2)
-lines(x, gamma_pdf, col = "blue", lwd = 2)
-
-legend("topright",
-       legend = c("Exponential", "Gamma"),
-       col = c("red", "blue"),
-       lwd = 2)
+curve(dlnorm(x, meanlog = mu, sdlog = sigma),
+      from = 0, to = max(data),
+      add = TRUE,
+      col = "red",
+      lwd = 2)
 ```
+
+# Duration dependences on different parameters
+
+## Date
+
+We want to know, whether duration of air alarm depends on the date when
+it started. Because we have over 400 values of duration, we will group
+them by month and calculate the average duration of air alarm for each
+month
 
 ```{r}
 df$started <- sub("\\+00:00$", "", df$started)
 df$started <- as.POSIXct(df$started, format = "%Y-%m-%d %H:%M:%S", tz = "UTC")
 
-plot(df$started, df$duration_min,
-     main = "Alarm Duration Over Time",
-     xlab = "Start Date",
-     ylab = "Duration (minutes)",
-     col = "blue",
-     pch = 19)
-
-grid(col = "gray", lty = 3, lwd = 0.5)
-```
-
-```{r}
-df$duration_min <- as.numeric(df$duration_min)
-
-
-weekly_mean <- df %>%
-  mutate(week = floor_date(started, "week")) %>%
-  group_by(week) %>%
-  summarise(duration_min = mean(duration_min, na.rm = TRUE)) %>%
-  arrange(week)
-
-weekly_mean
-
-plot(weekly_mean$week, weekly_mean$duration_min,
-     type = "o",
-     pch = 19,
-     main = "Average Air Alarm Duration per Week",
-     xlab = "Week",
-     ylab = "Average duration (minutes)",
-     col = "blue"
-)
-
-grid(col = "gray", lty = 3, lwd = 0.5)
-```
-
-```{r}
 monthly_mean <- df %>%
   mutate(month = floor_date(started, "month")) %>%
   group_by(month) %>%
   summarise(duration_min = mean(duration_min, na.rm = TRUE)) %>%
   arrange(month)
 
-monthly_mean
-
 plot(monthly_mean$month, monthly_mean$duration_min,
-     type = "o",
      pch = 19,
      main = "Average Air Alarm Duration per Month",
      xlab = "Month",
@@ -140,6 +160,78 @@ plot(monthly_mean$month, monthly_mean$duration_min,
 grid(col = "gray", lty = 3, lwd = 0.5)
 
 ```
+
+Visualy, we cannot see any dependence. Values are very spread around the
+plot, so it makes no sense to continue testing and build linear
+regression with this data.\
+
+## Year
+
+```{r}
+df$started <- as.POSIXct(df$started)
+
+yearly_mean <- df %>%
+  mutate(year = as.integer(format(started, "%Y"))) %>%
+  group_by(year) %>%
+  summarise(duration_min = mean(duration_min, na.rm = TRUE)) %>%
+  arrange(year)
+
+barplot(
+  yearly_mean$duration_min,
+  names.arg = yearly_mean$year,
+  col = "skyblue",
+  main = "Average Air Alarm Duration per Year",
+  xlab = "Year",
+  ylab = "Average Duration (minutes)"
+)
+```
+
+It is not visibly clear whether dependence between year and duration
+exists. To test dependence between year of alarm and its duration we use
+2 approaches Firstly, for or each air year we test such hypothesis,
+using t-test(because variance of data is unknown):
+
+> $H_0: \mu = \mu_{\text{year}}$,
+> $\quad H_1: \mu \neq \mu_{\text{year}}$
+
+where $\mu$ is the mean of the whole data, and $\mu_{\text{year}}$ is
+the sample mean of the year Secondly, we use Kolgomorov-Smirnov test, to
+compare e.c.d.f. of durations with some specific year to e.c.d.f. of the
+all durations \> $H_0 : F_{\text{year}} = F$ \>
+$H_1 : F_{\text{year}} \not= F_y$
+
+```{r}
+df$year <- as.integer(format(df$started, "%Y"))
+
+y_all <- df$duration_min
+
+for (yr in sort(unique(df$year))) {
+  
+  x <- df$duration_min[df$year == yr]         
+  y <- df$duration_min[df$year != yr]         
+  
+  # t-test
+  t_test <- t.test(x, y, alternative = "two.sided")
+  pval_t <- format(t_test$p.value, scientific = FALSE)
+  
+  # KS-test
+  ks_test <- suppressWarnings(ks.test(x, y, alternative = "two.sided"))
+  pval_ks <- format(ks_test$p.value, scientific = FALSE)
+  
+  cat("Year:", yr, "\n")
+  cat("  t-test p =", pval_t, "\n")
+  cat("  KS test p =", pval_ks, "\n\n")
+}
+```
+
+For 2023 and 2025 the KS test gives small p-values, indicating that the
+distribution of durations in these years differs from the overall
+distribution. However, for all years the t-test p-values are large, so
+we cannot reject H_0 regarding equality of means. For 2024 both tests
+show large p-values, meaning no detectable difference from the overall
+dataset. In general, we observe some dependence between the year and the
+distribution of alarm durations, but not in their mean values.\
+\## Weekday
 
 ```{r}
 
@@ -160,16 +252,31 @@ barplot(
     weekday_mean$duration_min,
     names.arg = weekday_mean$weekday_name,
     col = "skyblue",
-    border = "black",
     main = "Average Air Alarm Duration by Day of Week",
     xlab = "Day of Week",
     ylab = "Average Duration (minutes)"
 )
 
-abline(h = pretty(weekday_mean$duration_min), col = "gray80", lty = 3)
 ```
 
+On the weekendі we see some increase of the average duration. Lets test
+this hypotheses of dependence on weekday by building linear regression
+model. $H_0$ : b = 0 $H_1$ : b $\neq$ 0
+
 ```{r}
+model <- lm(weekday_mean$duration_min ~ weekday_mean$weekday)
+summary(model)
+```
+
+By p-value = 0.0063, which is lower than most commonly used significance
+levels(.1, .05, .01), we can reject $H_0$. This and high R-squared =
+0.8032 prove that dependence between day of the week and duration of
+alarm is significant.
+
+## Start hour
+
+```{r}
+
 df$hour <- as.integer(format(df$started, "%H"))
 
 hourly <- aggregate(df$duration_min,
@@ -181,8 +288,7 @@ colnames(hourly)[2] <- "duration_min"
 hourly <- hourly[order(hourly$hour), ]
 
 plot(hourly$hour, hourly$duration_min,
-     type = "o",            # line + circle markers
-     pch = 19,              # filled circles
+     pch = 19,             
      cex = 0.8,
      main = "Average Alarm Duration by Start Hour",
      xlab = "Start Hour of Day",
@@ -194,6 +300,57 @@ axis(1, at = 0:23)
 
 grid(col = "gray", lty = 3, lwd = 0.5)
 ```
+
+When we plot the average alarm duration by the hour of its start using
+the standard “midnight-to-midnight” scale, no clear pattern is visible.
+However, this representation is not always the most intuitive for
+understanding how alarm durations relate to the way a normal day is
+structured from a human perspective. To obtain a more meaningful view,
+we shift the daily cycle so that the plot begins at 5:00. All hours from
+midnight to 4:59 are therefore increased by 24, effectively placing them
+at the end of the 24-hour sequence.
+
+```{r}
+
+df$hour <- as.integer(format(df$started, "%H"))
+df$hour[df$hour < 6] <- df$hour[df$hour < 6] + 24
+
+hourly <- aggregate(df$duration_min,
+                    by = list(hour = df$hour),
+                    FUN = mean, na.rm = TRUE)
+
+colnames(hourly)[2] <- "duration_min"
+
+hourly <- hourly[order(hourly$hour), ]
+
+plot(hourly$hour, hourly$duration_min,
+     pch = 19,             
+     cex = 0.8,
+     main = "Average Alarm Duration by Start Hour",
+     xlab = "Start Hour of Day",
+     ylab = "Average Duration (minutes)"
+)
+
+
+```
+
+Now, the data is not spreaded as much as before, so we can try and test
+hypotheses whether duration depends on start hour. We do it by building
+regression model $H_0$ : b = 0 $H_1$ : b $\neq$ 0
+
+```{r}
+model <- lm(hourly$duration_min ~ hourly$hour)
+summary(model)
+```
+
+By p-value = 0.00291, which is lower than most commonly used
+significance levels(.1, .05, .01), we can reject $H_0$. R-squared =
+0.3375 may seem to be not high enough, but considering that our data
+comes from real world, where it is highly influenced by many human
+behaviour based factors, we still conclude that dependence between day
+of the week and duration of alarm is significant enough.
+
+## Alarm type
 
 ```{r}
 alarm_avg <- aggregate(df$duration_min,
@@ -220,19 +377,22 @@ barplot(alarm_avg$duration_min,
 abline(v = pretty(alarm_avg$duration_min), col = "gray80", lty = 3)
 ```
 
-------------------------------------------------------------------------
-
-# Hypothesis testing
-
-## Mean testing
-
-For each air alarm type:
+To test dependence between type of alarm and its duration we use 2
+approaches Firstly, for or each air alarm type we test such hypothesis
+using t-test(because variance of data is unknown):
 
 > $H_0: \mu = \mu_{\text{type}}$,
 > $\quad H_1: \mu \neq \mu_{\text{type}}$
 
-where $\mu$ is the mean of the whole population, and $\mu_{\text{type}}$
-is the sample mean of the type
+where $\mu$ is the mean of the whole data, and $\mu_{\text{type}}$ is
+the sample mean of the type
+
+Secondly, we use Kolgomorov-Smirnov test, to compare e.c.d.f. of
+durations with some specific type of air alarm to e.c.d.f. of the data
+
+$H_0 : F_{\text{type}} = F$
+
+$H_1 : F_{\text{type}} \not= F_y$
 
 ```{r}
 y_all <- df$duration_min
@@ -254,37 +414,38 @@ for (type in unique(df$alarm_type)) {
   ks_test <- suppressWarnings(ks.test(x, y, alternative = "two.sided"))
   pval_ks <- format(ks_test$p.value, scientific = FALSE)
   
-  ad_test <- ad.test(x, y)
-  pval_ad <- format(ad_pvalue(ad_test), scientific = FALSE)
-  
   cat("Alarm type:", type, "\n")
   cat("  t-test p =", pval_t, "\n")
   cat("  KS test p =", pval_ks, "\n")
-  cat("  AD test p =", pval_ad, "\n\n")
 }
 ```
 
-## Dependence testing
-
-> $H_0$ - start time of an alarm and it’s duration are independent\
-> $H_1$ - there is a dependence between the time of the start of an
-> alarm and it’s duration
-
-```{r}
-df$hour <- as.numeric(format(df$started, "%H")) +
-           as.numeric(format(df$started, "%M")) / 60
-cor_test <- cor.test(df$hour, df$duration_min, method = "spearman")
-cor_test
-
-```
-
-```{r}
-data <- data[!is.na(data) & data > 0]
-```
+For unknown type of air alarm we got high p-values, as expected. For all
+other air alarm types p-values are small enough to not reject $H_0$ in
+both tests. The only exception is KS for alarm type "Кинджал", but from
+a t-test, we can not reject $H_0$. In overall, we observed dependency
+between type of the alarm and its duration.
 
 # Estimation models
 
 ## Regression
+
+To examine how different factors jointly influence the duration of air
+alarms, we fit a multiple linear regression model where the response
+variable is the alarm duration in
+minutes.$y = a+ b_1\cdot x_1+b_2\cdot x_2 +b_3 \cdot x_3 + b_4 \cdot x_4 + c_1\cdot i_1 + ... + c_5\cdot i_5+ \epsilon$,
+
+Where:\
+$b_1$: number of regions with an active air alarm,
+
+$b_2$: start hour,
+
+$b_3$: start year - 2022,
+
+$b_4$: weekday,
+
+$c_j$: for each of the 5 air alarm types (if the air alarm is active
+then $i_j$ = 1)
 
 ```{r}
 df <- read.csv("datasets/tg_parsed_alarms.csv")
@@ -292,39 +453,109 @@ df$started <- ymd_hms(df$started, tz = "UTC")
 
 df$start_hour <- hour(df$started)
 df$start_hour <- as.numeric(df$start_hour)
+df$start_hour<-df$start_hour+5
 
 df$start_year <- year(df$started)
 df$start_year <- as.numeric(df$start_year)
 df$start_year <- df$start_year-2022
 
+df$start_weekday <-  (as.integer(strftime(df$started, "%u")) - 1)
+
 df$alarm_type <- as.factor(df$alarm_type)
 df$duration_min <- as.numeric(df$duration_min)
 
 df$regions_n <- sapply(strsplit(df$alarms_in_regions, ";"), function(x) length(trimws(x)))
-head(df)
 ```
 
 ```{r}
-hour_lm<-lm(formula=duration_min ~ start_hour,data=df)
-summary(hour_lm)
-plot(df$start_hour, df$duration_min,
-     xlab = "start hour",
-     ylab = "duration",
-     main = "duration|start hour")
-
-abline(hour_lm, col = "red", lwd = 2)
-```
-```{r}
-f_lm<-lm(formula=duration_min ~ regions_n*alarm_type+start_hour+start_year,data=df) 
+f_lm<-lm(formula=duration_min ~ regions_n+alarm_type+start_hour+start_year+start_weekday,data=df) 
 summary(f_lm)
+hist(residuals(f_lm))
+
 ```
-after removing outliers
+
+And to improve regression model we removed outliers.
+
 ```{r}
-model_pr <- lm(duration_min ~ regions_n+alarm_type+start_hour+start_year, data=df)
+model_pr <- lm(duration_min ~ regions_n+alarm_type+start_hour+start_year+start_weekday, data=df)
 res <- rstandard(model_pr)
 df_clean <- df[abs(res) < 3, ]
-f_lm <- lm(duration_min ~ regions_n*alarm_type*start_hour*start_year, data=df_clean)
+f_lm <- lm(duration_min ~ regions_n+alarm_type+start_hour+start_year+start_weekday, data=df_clean)
 summary(f_lm)
+hist(residuals(f_lm))
 
 ```
 
+The regression results show that several factors have a statistically
+significant effect on alarm duration. The number of affected regions
+strongly increases duration (p \< .001). Among alarm types,
+“БпЛА/Шахеди” and “Ракетна” seem to have way significant impact on air
+alarm duration (p \< .001), while other types do not.
+
+Overall, the model explains about 32% of the variance (R\^2 = 0.325),
+suggesting that these factors jointly capture a meaningful part of the
+variation in alarm durations.
+
+## Lognormal Distribution:
+
+A random variable X is lognormally distributed if its logarithm is
+normally distributed: $\ln X \sim \mathcal{N}(\mu, \sigma\^{2})$
+
+In our case it fits well, because our data: - Cannot be negative - Most
+are small, few are extremely large - Heavy right tail
+
+and it is predictable, because lognormal distribution is mostly
+applicable in: - Durations (waiting times, alarm durations, time until
+something finishes) - Income distribution - Stock prices - Biological
+growth
+
+It's PDF:
+
+f(x) =
+$\frac{1}{x \, \sigma \sqrt{2\pi}} \exp!\left( -\frac{(\ln x - \mu)^{2}}{2\sigma^{2}} \right), \qquad x \> 0$
+
+## fitdist()
+
+fitdist() is a function from fitdistrplus package, that can fit
+distribution for given data using MLE or MME, by default it uses MLE to
+estimate parameters of distribution, we want to fit.
+
+Also it shows estimated standard deviation of the estimator, which is
+basically shows us the precision of estimator
+
+gofstat() is also a funciton from fitdistrplus package, that cumputes
+goodness-of-fit statistics for fitted dsitributions. It compares fitted
+dsitrubions via Kolmogorov-Smirnov statistic, Cramer-von Mises
+statistic, Anderson-Darling statistic, Akaike's Information Criterion,
+Bayesian Information Criterion:
+
+1)  Kolmogorov–Smirnov statistic: measures supremum of distances between
+    the empirical CDF of data and the fitted distribution’s CDF D =
+    $\sup\_{x} \left\| F_n(x) - F(x \mid \theta) \right\|$
+
+2)  Cramer-von Mises statistic measures integrated squared distance
+    between empirical CDF and fitted distribution’s CDF $\omega\^2$ =
+    $\int\_{-\infty}\^{\infty} \left( F_n(x) - F(x) \right)\^2 , dF(x)$
+
+3)  Anderson-Darling statistic the same as Cramer-von Mises statistic,
+    but the integrated squared distance is divided by F(x)(1 - F(x)),
+    which gives more weight to tails
+    $A\^2 = \int\_{-\infty}\^{\infty} \frac{ \left( F_n(x) - F(x) \right)^2 }{ F(x)\left( 1 - F(x) \right) }, dF(x)$
+
+4)  Akaike Information Criterion(AIC): AIC = −2logL+2k, where L - log
+    likelihood, k - number of parameters(as an example for exponential 1
+    parameter (rate), for normal(mean, sd) or lognormal(meanlog,
+    sdlog) - 2, it is usefull as it penalizes overfitting (when
+    distribution has to many parameters, it basically can "memorize" the
+    data, and starts matching random noise in data, but not the pattern
+    of it)
+
+5)  Bayesian Information Criterion (BIC): BIC = 2logL+klogn. penalizes
+    number of parameters even stronger, and tells, that simplier
+    distributions are better, if fits are similar
+
+In all of this Goodness-of-fit tests and criteria, to choose the
+best-fitting distribution we have to choose one, with the smallest value
+of test statistic, and according to all of those tests and criteria, we
+can state, that lognormal is the closest distribution to our observed
+data
